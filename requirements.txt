@@ -1,0 +1,8 @@
+gymnasium>=0.29.1
+minigrid>=2.5.0
+torch>=2.2.0
+transformers>=4.40.0
+numpy>=1.26.0
+matplotlib>=3.8.0
+pytest>=8.0.0
+pillow>=10.0.0
