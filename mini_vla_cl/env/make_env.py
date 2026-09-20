@@ -1,5 +1,9 @@
+import os
+
 import gymnasium as gym
 from minigrid.wrappers import RGBImgObsWrapper
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 from mini_vla_cl.env.skills import SKILLS
 

@@ -1,6 +1,9 @@
-import numpy as np
+from types import SimpleNamespace
 
-from mini_vla_cl.model.encoder import FakeEncoder
+import numpy as np
+import torch
+
+from mini_vla_cl.model.encoder import FakeEncoder, _to_unit_features
 
 
 def test_fake_encoder_deterministic_and_shape():
@@ -14,3 +17,14 @@ def test_fake_encoder_deterministic_and_shape():
     assert np.allclose(a[0], enc.encode_images([img])[0])
     assert not np.allclose(enc.encode_images([img])[0], enc.encode_images([img2])[0])
     assert np.allclose(b[0], b[1])
+
+
+def test_to_unit_features_accepts_pooling_output():
+    pooled = torch.ones(2, 4)
+    proj = torch.nn.Linear(4, 4, bias=False)
+    with torch.no_grad():
+        proj.weight.copy_(torch.eye(4))
+    out = _to_unit_features(SimpleNamespace(pooler_output=pooled), proj, torch)
+    assert torch.is_tensor(out)
+    assert out.shape == (2, 4)
+    assert torch.allclose(out.norm(dim=-1), torch.ones(2))

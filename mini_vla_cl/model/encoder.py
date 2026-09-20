@@ -39,6 +39,16 @@ class FakeEncoder:
         )
 
 
+def _to_unit_features(feats, projection, torch):
+    """Newer transformers may return a pooling object instead of a tensor."""
+    if not torch.is_tensor(feats):
+        pooled = getattr(feats, "pooler_output", None)
+        if pooled is None:
+            pooled = feats[1]
+        feats = projection(pooled)
+    return feats / feats.norm(dim=-1, keepdim=True)
+
+
 class ClipEncoder:
     def __init__(self, model_id: str | None = None, device: str = "cpu") -> None:
         import torch
@@ -46,7 +56,9 @@ class ClipEncoder:
 
         self.embed_dim = EMBED_DIM
         self.device = device
-        self.processor = CLIPProcessor.from_pretrained(model_id or CLIP_MODEL_ID)
+        self.processor = CLIPProcessor.from_pretrained(
+            model_id or CLIP_MODEL_ID, use_fast=False
+        )
         self.model = CLIPModel.from_pretrained(model_id or CLIP_MODEL_ID)
         self.model.to(device)
         self.model.eval()
@@ -59,16 +71,19 @@ class ClipEncoder:
 
         images = [Image.fromarray(rgb).convert("RGB").resize((224, 224)) for rgb in rgbs]
         inputs = self.processor(images=images, return_tensors="pt")
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        pixel_values = inputs["pixel_values"].to(self.device)
         with self._torch.no_grad():
-            feats = self.model.get_image_features(**inputs)
-            feats = feats / feats.norm(dim=-1, keepdim=True)
+            feats = self.model.get_image_features(pixel_values=pixel_values)
+            feats = _to_unit_features(feats, self.model.visual_projection, self._torch)
         return feats.detach().cpu().numpy().astype(np.float32)
 
     def encode_texts(self, texts: list[str]) -> np.ndarray:
         inputs = self.processor(text=texts, return_tensors="pt", padding=True)
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        kwargs = {
+            "input_ids": inputs["input_ids"].to(self.device),
+            "attention_mask": inputs["attention_mask"].to(self.device),
+        }
         with self._torch.no_grad():
-            feats = self.model.get_text_features(**inputs)
-            feats = feats / feats.norm(dim=-1, keepdim=True)
+            feats = self.model.get_text_features(**kwargs)
+            feats = _to_unit_features(feats, self.model.text_projection, self._torch)
         return feats.detach().cpu().numpy().astype(np.float32)
