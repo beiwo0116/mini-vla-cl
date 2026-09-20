@@ -19,12 +19,19 @@ def test_fake_encoder_deterministic_and_shape():
     assert np.allclose(b[0], b[1])
 
 
-def test_to_unit_features_accepts_pooling_output():
-    pooled = torch.ones(2, 4)
-    proj = torch.nn.Linear(4, 4, bias=False)
+def test_to_unit_features_projects_hidden_size():
+    pooled = torch.ones(2, 8)
+    proj = torch.nn.Linear(8, 4, bias=False)
     with torch.no_grad():
-        proj.weight.copy_(torch.eye(4))
+        proj.weight.copy_(torch.eye(4, 8))
     out = _to_unit_features(SimpleNamespace(pooler_output=pooled), proj, torch)
-    assert torch.is_tensor(out)
+    assert out.shape == (2, 4)
+    assert torch.allclose(out.norm(dim=-1), torch.ones(2))
+
+
+def test_to_unit_features_skips_projection_when_already_512():
+    projected = torch.ones(2, 4)
+    proj = torch.nn.Linear(8, 4, bias=False)
+    out = _to_unit_features(SimpleNamespace(pooler_output=projected), proj, torch)
     assert out.shape == (2, 4)
     assert torch.allclose(out.norm(dim=-1), torch.ones(2))

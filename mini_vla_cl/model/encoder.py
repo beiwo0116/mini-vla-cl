@@ -40,13 +40,34 @@ class FakeEncoder:
 
 
 def _to_unit_features(feats, projection, torch):
-    """Newer transformers may return a pooling object instead of a tensor."""
-    if not torch.is_tensor(feats):
-        pooled = getattr(feats, "pooler_output", None)
-        if pooled is None:
-            pooled = feats[1]
-        feats = projection(pooled)
-    return feats / feats.norm(dim=-1, keepdim=True)
+    """Normalize CLIP features across transformers versions.
+
+    Some builds return a tensor; others wrap already-projected 512-d vectors
+    in a pooling object. Only run the Linear projection when the last dim
+    matches ``projection.in_features``.
+    """
+    if torch.is_tensor(feats):
+        x = feats
+    else:
+        x = getattr(feats, "image_embeds", None)
+        if x is None:
+            x = getattr(feats, "text_embeds", None)
+        if x is None:
+            x = getattr(feats, "pooler_output", None)
+        if x is None:
+            x = feats[1]
+        if not torch.is_tensor(x):
+            raise TypeError(f"CLIP features are not a tensor: {type(x)}")
+        in_dim = projection.in_features
+        out_dim = projection.out_features
+        if x.shape[-1] == in_dim:
+            x = projection(x)
+        elif x.shape[-1] != out_dim:
+            raise ValueError(
+                f"CLIP feature dim {x.shape[-1]} matches neither "
+                f"projection in={in_dim} nor out={out_dim}"
+            )
+    return x / x.norm(dim=-1, keepdim=True)
 
 
 class ClipEncoder:
